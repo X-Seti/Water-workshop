@@ -1,0 +1,64 @@
+.
+├── apps
+│   ├── appfactory.settings.json
+│   ├── components
+│   │   ├── __init__.py
+│   │   └── Water_Editor
+│   │       ├── depends
+│   │       │   └── gui_workshop.py
+│   │       └── water_workshop.py
+│   ├── core
+│   │   ├── __init__.py
+│   │   └── theme_utils.py
+│   ├── __init__.py
+│   ├── methods
+│   │   ├── imgfactory_svg_icons.py
+│   │   └── __init__.py
+│   ├── themes
+│   │   ├── amiga_mui_light.json
+│   │   ├── amiga_wb light.json
+│   │   ├── amiga_wb_light.json
+│   │   ├── app_factory.json
+│   │   ├── blue_panels_dark.json
+│   │   ├── blue_theme_light.json
+│   │   ├── bluish_light.json
+│   │   ├── classic_dark.json
+│   │   ├── cyberpunk_dark.json
+│   │   ├── default_green.json
+│   │   ├── Default Green.json
+│   │   ├── garujaro_dark.json
+│   │   ├── green_shad_light.json
+│   │   ├── green_theme_light.json
+│   │   ├── gta_forums_dark.json
+│   │   ├── gta_forums_light.json
+│   │   ├── gta_liberty_city_dark.json
+│   │   ├── gta_san_andreas_dark.json
+│   │   ├── gta_vice_city_dark.json
+│   │   ├── img_factory_dark.json
+│   │   ├── img_factory_light.json
+│   │   ├── __init__.py
+│   │   ├── knight_rider_dark.json
+│   │   ├── lavender_theme_light.json
+│   │   ├── manjaro2_dark.json
+│   │   ├── manjaro_dark.json
+│   │   ├── matrix_dark.json
+│   │   ├── pastel_theme_light.json
+│   │   ├── peach_theme_light.json
+│   │   ├── pink_theme_light.json
+│   │   ├── professional_light.json
+│   │   ├── red_dead_theme_dark.json
+│   │   ├── red_theme_dark.json
+│   │   ├── rockstar_dark.json
+│   │   ├── synthwave_outrun_dark.json
+│   │   ├── system_kde.json
+│   │   ├── tea_and_toast_dark.json
+│   │   └── yellow_theme_light.json
+│   └── utils
+│       ├── app_settings_system.py
+│       └── __init__.py
+├── cc.py
+├── LICENSE
+├── README.md
+└── tree.git
+
+9 directories, 53 files
