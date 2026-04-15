@@ -23,12 +23,30 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtCore import Qt, QSize, QPoint, pyqtSignal
 
-try:
-    from apps.components.Tmp_Template.gui_workshop import GUIWorkshop
-except ImportError:
-    import os
+# GUIWorkshop import — works in both standalone repo and IMG Factory:
+#   Standalone: depends/gui_workshop.py (sibling to this file)
+#   IMG Factory: apps/components/Tmp_Template/gui_workshop.py
+def _find_gui_workshop():
+    # 1. depends/ folder (standalone Water-Workshop repo)
+    _dep = Path(__file__).parent / "depends" / "gui_workshop.py"
+    if _dep.exists():
+        import importlib.util as _u
+        _s = _u.spec_from_file_location("gui_workshop", _dep)
+        _m = _u.module_from_spec(_s)
+        _s.loader.exec_module(_m)
+        return _m.GUIWorkshop
+    # 2. IMG Factory package
+    try:
+        from apps.components.Tmp_Template.gui_workshop import GUIWorkshop as _G
+        return _G
+    except ImportError:
+        pass
+    # 3. Add project root and retry
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-    from apps.components.Water_Editor.depends.gui_workshop import GUIWorkshop
+    from apps.components.Tmp_Template.gui_workshop import GUIWorkshop as _G
+    return _G
+
+GUIWorkshop = _find_gui_workshop()
 
 try:
     from apps.methods.imgfactory_svg_icons import SVGIconFactory
@@ -231,10 +249,12 @@ class WaterGridWidget(QWidget):
         self._sel_cx = self._sel_cy = -1
         self._zoom   = 1.0
         self._pan_x  = self._pan_y = 0
+        if hasattr(self, "_img_cache"): del self._img_cache
         self.update()
 
     def set_grid(self, grid: bytearray):
         self._grid = grid
+        if hasattr(self, "_img_cache"): del self._img_cache
         self.update()
 
     def _cell_col(self, val: int) -> QColor:
@@ -274,6 +294,17 @@ class WaterGridWidget(QWidget):
         if 0 <= cx < self._grid_w and 0 <= cy < self._grid_w:
             self._grid[cy * self._grid_w + cx] = val
 
+    def _rebuild_cache(self):
+        """Render grid data to a QImage for fast blitting."""
+        from PyQt6.QtGui import QImage
+        gw  = self._grid_w
+        img = QImage(gw, gw, QImage.Format.Format_RGB32)
+        for cy in range(gw):
+            for cx in range(gw):
+                img.setPixel(cx, cy, self._cell_col(self._grid[cy*gw+cx]).rgb())
+        self._img_cache  = img
+        self._cache_flip = self._colour_flipped
+
     def paintEvent(self, ev):
         if not self._grid_w:
             return
@@ -282,25 +313,37 @@ class WaterGridWidget(QWidget):
         px0 = self._pan_x
         py0 = self._pan_y
         p   = QPainter(self)
-        for cy in range(gw):
-            for cx in range(gw):
-                x, y = px0 + cx*ts, py0 + cy*ts
-                if (cx, cy) in self._preview_cells:
-                    p.fillRect(x, y, ts, ts, self.COL_PREV)
-                else:
-                    p.fillRect(x, y, ts, ts, self._cell_col(self._grid[cy*gw+cx]))
-                if (cx, cy) == (self._hover_cx, self._hover_cy):
-                    p.fillRect(x, y, ts, ts, self.COL_HOVER)
+
+        # Fast path: scale the cached QImage to current zoom
+        if not hasattr(self, "_img_cache") or                 getattr(self, "_cache_flip", None) != self._colour_flipped:
+            self._rebuild_cache()
+        from PyQt6.QtCore import QRect
+        p.drawImage(QRect(px0, py0, gw*ts, gw*ts),
+                    self._img_cache, self._img_cache.rect())
+
+        # Preview cells on top
+        for (cx, cy) in self._preview_cells:
+            p.fillRect(px0+cx*ts, py0+cy*ts, ts, ts, self.COL_PREV)
+
+        # Hover overlay
+        if self._hover_cx >= 0:
+            p.fillRect(px0+self._hover_cx*ts, py0+self._hover_cy*ts,
+                       ts, ts, self.COL_HOVER)
+
+        # Selection
         if self._sel_cx >= 0:
             x, y = px0 + self._sel_cx*ts, py0 + self._sel_cy*ts
             p.setPen(QPen(self.COL_SEL, 2))
             p.drawRect(x+1, y+1, ts-2, ts-2)
+
+        # Grid lines when zoomed in enough
         if self._show_grid and ts >= 4:
             p.setPen(QPen(self.COL_GRID, 1))
             for c in range(gw+1):
                 p.drawLine(px0+c*ts, py0, px0+c*ts, py0+gw*ts)
             for r in range(gw+1):
                 p.drawLine(px0, py0+r*ts, px0+gw*ts, py0+r*ts)
+
         ws   = self._workshop
         tool = ws._active_tool if ws else "pencil"
         p.setPen(QColor(255, 255, 255, 180))
@@ -458,6 +501,18 @@ class WaterGridWidget(QWidget):
             self._grid[y*gw+x] = val
             stack.extend([(x+1,y),(x-1,y),(x,y+1),(x,y-1)])
 
+    def sizeHint(self):
+        from PyQt6.QtCore import QSize
+        if self._grid_w:
+            ts = max(2, min(self.width() or 800, self.height() or 600) // self._grid_w)
+            sz = self._grid_w * ts
+            return QSize(sz, sz)
+        return QSize(400, 400)
+
+    def minimumSizeHint(self):
+        from PyQt6.QtCore import QSize
+        return QSize(200, 200)
+
     def fit(self):
         self._zoom  = 1.0
         self._pan_x = self._pan_y = 0
@@ -565,6 +620,10 @@ class SaWaterCanvas(QWidget):
         self._zoom = max(0.01, min(50.0, self._zoom * f))
         self.update()
 
+    def sizeHint(self):
+        from PyQt6.QtCore import QSize
+        return QSize(600, 600)
+
     def fit(self):
         self._fit()
         self.update()
@@ -605,6 +664,12 @@ class WaterWorkshop(GUIWorkshop):
             self.setWindowIcon(_SVG.water_workshop_icon(64))
         except Exception:
             pass
+        # When docked: hide toolbar file buttons (they move to left panel)
+        if not self.standalone_mode:
+            for btn_name in ("open_btn", "save_btn", "export_btn", "import_btn"):
+                btn = getattr(self, btn_name, None)
+                if btn:
+                    btn.setVisible(False)
 
     def _build_menus_into_qmenu(self, pm):
         fm = pm.addMenu("File")
@@ -646,6 +711,35 @@ class WaterWorkshop(GUIWorkshop):
         panel.setFrameStyle(QFrame.Shape.StyledPanel)
         ll  = QVBoxLayout(panel)
         ll.setContentsMargins(*self.get_panel_margins())
+
+        # Docked mode: file buttons live here (not on toolbar)
+        if not self.standalone_mode:
+            ic  = self._get_icon_color()
+            btn_row = QHBoxLayout()
+            btn_row.setSpacing(2)
+
+            def _pb(icon_fn, tip, slot):
+                b = QPushButton()
+                try:
+                    b.setIcon(getattr(SVGIconFactory, icon_fn)(16, ic))
+                    b.setIconSize(QSize(16, 16))
+                except Exception:
+                    pass
+                b.setToolTip(tip)
+                b.setFixedHeight(26)
+                b.clicked.connect(slot)
+                btn_row.addWidget(b)
+                return b
+
+            _pb("open_icon",   "Load water file (Ctrl+O)", self._open_file)
+            self._docked_save_btn = _pb("save_icon", "Save (Ctrl+S)", self._save_file)
+            _pb("export_icon", "Export grids as BMP",      self._export_bmp)
+            _pb("import_icon", "Import BMP grid",          self._import_bmp)
+            ll.addLayout(btn_row)
+
+            sep0 = QFrame(); sep0.setFrameShape(QFrame.Shape.HLine)
+            ll.addWidget(sep0)
+
         hdr = QLabel("Water Levels / Rects")
         hdr.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hdr.setFont(self.panel_font)
@@ -778,6 +872,8 @@ class WaterWorkshop(GUIWorkshop):
     def _on_grid_changed(self):
         self._dirty_lbl.setText("Modified: yes")
         self.save_btn.setEnabled(True)
+        for c in (self._phys_canvas, self._vis_canvas):
+            if hasattr(c, "_img_cache"): del c._img_cache
 
     def _on_tab_changed(self, idx: int):
         self._active_grid = "phys" if idx == 0 else "vis"
