@@ -23,30 +23,12 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtCore import Qt, QSize, QPoint, pyqtSignal
 
-# GUIWorkshop import — works in both standalone repo and IMG Factory:
-#   Standalone: depends/gui_workshop.py (sibling to this file)
-#   IMG Factory: apps/components/Tmp_Template/gui_workshop.py
-def _find_gui_workshop():
-    # 1. depends/ folder (standalone Water-Workshop repo)
-    _dep = Path(__file__).parent / "depends" / "gui_workshop.py"
-    if _dep.exists():
-        import importlib.util as _u
-        _s = _u.spec_from_file_location("gui_workshop", _dep)
-        _m = _u.module_from_spec(_s)
-        _s.loader.exec_module(_m)
-        return _m.GUIWorkshop
-    # 2. IMG Factory package
-    try:
-        from apps.components.Tmp_Template.gui_workshop import GUIWorkshop as _G
-        return _G
-    except ImportError:
-        pass
-    # 3. Add project root and retry
+try:
+    from apps.components.Tmp_Template.gui_workshop import GUIWorkshop
+except ImportError:
+    import os
     sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-    from apps.components.Tmp_Template.gui_workshop import GUIWorkshop as _G
-    return _G
-
-GUIWorkshop = _find_gui_workshop()
+    from apps.components.Tmp_Template.gui_workshop import GUIWorkshop
 
 try:
     from apps.methods.imgfactory_svg_icons import SVGIconFactory
@@ -273,14 +255,21 @@ class WaterGridWidget(QWidget):
         if not self._grid_w:
             return 8
         base = min(self.width() // self._grid_w, self.height() // self._grid_w)
-        return max(2, int(base * self._zoom))
+        ts = max(1, int(base * self._zoom))  # allow ts=1 for large grids (SOL 384x384)
+        return ts
 
     def _cell_at(self, pos):
+        """Map screen position to data (col, row).
+        Inverse of Y-flip: img_x=col, img_y=gw-1-row
+        So: data_col = img_x = screen_x//ts
+            data_row = gw-1-img_y = gw-1-(screen_y//ts)
+        """
         ts     = self._ts()
         ax, ay = pos.x() - self._pan_x, pos.y() - self._pan_y
         if ax < 0 or ay < 0:
             return -1, -1
-        cx, cy = ax // ts, ay // ts
+        cx = ax // ts
+        cy = self._grid_w - 1 - (ay // ts)
         if 0 <= cx < self._grid_w and 0 <= cy < self._grid_w:
             return cx, cy
         return -1, -1
@@ -295,13 +284,21 @@ class WaterGridWidget(QWidget):
             self._grid[cy * self._grid_w + cx] = val
 
     def _rebuild_cache(self):
-        """Render grid data to a QImage for fast blitting."""
+        """Render grid data to QImage.
+
+        Correct transform (matches WaterproGen + PIL test - dominant lower-left):
+          img_x = col, img_y = gw-1-row  (Y-flip)
+
+        This means row 0 = bottom of image, row gw-1 = top.
+        Land at rows 133-226 appears at img_y = 157-250 (lower half).
+        """
         from PyQt6.QtGui import QImage
         gw  = self._grid_w
         img = QImage(gw, gw, QImage.Format.Format_RGB32)
-        for cy in range(gw):
-            for cx in range(gw):
-                img.setPixel(cx, cy, self._cell_col(self._grid[cy*gw+cx]).rgb())
+        for row in range(gw):
+            img_y = gw - 1 - row
+            for col in range(gw):
+                img.setPixel(col, img_y, self._cell_col(self._grid[row*gw+col]).rgb())
         self._img_cache  = img
         self._cache_flip = self._colour_flipped
 
@@ -314,25 +311,29 @@ class WaterGridWidget(QWidget):
         py0 = self._pan_y
         p   = QPainter(self)
 
-        # Fast path: scale the cached QImage to current zoom
+        # Draw cached QImage scaled to current zoom using explicit scale transform
         if not hasattr(self, "_img_cache") or                 getattr(self, "_cache_flip", None) != self._colour_flipped:
             self._rebuild_cache()
-        from PyQt6.QtCore import QRect
-        p.drawImage(QRect(px0, py0, gw*ts, gw*ts),
-                    self._img_cache, self._img_cache.rect())
+        p.save()
+        p.translate(px0, py0)
+        p.scale(ts, ts)
+        p.drawImage(0, 0, self._img_cache)
+        p.restore()
 
-        # Preview cells on top
+        # Preview cells — Y-flip: screen_x=col*ts, screen_y=(gw-1-row)*ts
         for (cx, cy) in self._preview_cells:
-            p.fillRect(px0+cx*ts, py0+cy*ts, ts, ts, self.COL_PREV)
+            p.fillRect(px0 + cx*ts, py0 + (gw-1-cy)*ts, ts, ts, self.COL_PREV)
 
-        # Hover overlay
+        # Hover overlay — Y-flip: screen_x=col*ts, screen_y=(gw-1-row)*ts
         if self._hover_cx >= 0:
-            p.fillRect(px0+self._hover_cx*ts, py0+self._hover_cy*ts,
+            p.fillRect(px0 + self._hover_cx*ts,
+                       py0 + (gw-1-self._hover_cy)*ts,
                        ts, ts, self.COL_HOVER)
 
         # Selection
         if self._sel_cx >= 0:
-            x, y = px0 + self._sel_cx*ts, py0 + self._sel_cy*ts
+            x = px0 + self._sel_cx*ts
+            y = py0 + (gw-1-self._sel_cy)*ts
             p.setPen(QPen(self.COL_SEL, 2))
             p.drawRect(x+1, y+1, ts-2, ts-2)
 
