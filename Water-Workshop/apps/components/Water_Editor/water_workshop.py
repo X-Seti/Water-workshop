@@ -24,10 +24,11 @@ from PyQt6.QtGui import (
 from PyQt6.QtCore import Qt, QSize, QPoint, pyqtSignal
 
 try:
-    from apps.components.Water_Editor.depends.gui_workshop import GUIWorkshop
+    from apps.methods.gui_workshop import GUIWorkshop
 except ImportError:
-    sys.path.insert(0, str(Path(__file__).parent / "depends"))
-    from gui_workshop import GUIWorkshop
+    import os
+    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
+    from apps.methods.gui_workshop import GUIWorkshop
 
 try:
     from apps.methods.imgfactory_svg_icons import SVGIconFactory
@@ -207,6 +208,24 @@ class SaWaterParser:
 # =============================================================================
 
 class WaterGridWidget(QWidget):
+
+    def _get_ui_color(self, key): #vers 1
+        """Get a theme-aware QColor from app_settings. No hardcoded colors."""
+        from PyQt6.QtGui import QColor
+        try:
+            app_settings = getattr(self, 'app_settings', None) or \
+                getattr(getattr(self, 'main_window', None), 'app_settings', None)
+            if app_settings and hasattr(app_settings, 'get_ui_color'):
+                return app_settings.get_ui_color(key)
+        except Exception:
+            pass
+        # Palette fallback - no hardcoded values
+        pal = self.palette()
+        if key == 'viewport_bg':
+            return pal.color(pal.ColorRole.Base)
+        if key == 'viewport_text':
+            return pal.color(pal.ColorRole.PlaceholderText)
+        return pal.color(pal.ColorRole.WindowText)
     cell_clicked       = pyqtSignal(int, int)
     cell_right_clicked = pyqtSignal(int, int, QPoint)
     color_picked       = pyqtSignal(bool, bool)
@@ -590,7 +609,7 @@ class SaWaterCanvas(QWidget):
         p = QPainter(self)
         p.fillRect(self.rect(), self.COL_BG)
         if not self._quads:
-            p.setPen(QColor(100, 100, 100))
+            p.setPen(self._get_ui_color('viewport_text'))
             p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter,
                        "No SA water quads — load SA water.dat")
             p.end()
