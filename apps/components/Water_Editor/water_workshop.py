@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# apps/components/Water_Editor/water_workshop.py - Version: 10
+# apps/components/Water_Editor/water_workshop.py - Version: 13
 # X-Seti - Apr 2026 - IMG Factory 1.6 - Water Workshop
 # Built on temp_workshop.py / GUIWorkshop base
 
@@ -29,6 +29,10 @@ from PyQt6.QtCore import Qt, QSize, QPoint, pyqtSignal
 
 import sys
 from pathlib import Path
+
+
+
+
 sys.path.insert(0, str(Path(__file__).parent))
 from depends.gui_workshop import GUIWorkshop
 from apps.methods.imgfactory_svg_icons import SVGIconFactory
