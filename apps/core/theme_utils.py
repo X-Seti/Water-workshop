@@ -1,4 +1,4 @@
-#this belongs in apps/core/theme_utils.py - Version: 2
+#this belongs in apps/core/theme_utils.py - Version: 3
 # X-Seti - March 2026 - IMG Factory 1.6
 # Shared theme utilities — makes QDialogs and QWidgets theme-aware.
 """
@@ -86,6 +86,18 @@ def build_dialog_stylesheet(colors: dict) -> str:
     fg_acc   = colors.get("text_accent",           "#0066cc")
     acc      = colors.get("accent_primary",        "#0078d4")
     brd      = colors.get("border",                "#cccccc")
+    # Handle style — 4 types: line, gradient, dots, invisible
+    _hstyle  = colors.get("handle_style", "line")
+    _hcol    = colors.get("handle_color",  brd)
+    _hsize   = colors.get("handle_size",   "4")
+    if _hstyle == "gradient":
+        handle_css = f"background: qlineargradient(x1:0,y1:0,x2:1,y2:0, stop:0 transparent, stop:0.5 {_hcol}, stop:1 transparent); width: {_hsize}px;"
+    elif _hstyle == "dots":
+        handle_css = f"background: {_hcol}; width: {_hsize}px; border-top: 2px dotted {acc}; border-bottom: 2px dotted {acc};"
+    elif _hstyle == "invisible":
+        handle_css = f"background: transparent; width: {_hsize}px;"
+    else:  # line (default)
+        handle_css = f"background: {_hcol}; width: {_hsize}px;"
     btn_n    = colors.get("button_normal",         "#e0e0e0")
     btn_h    = colors.get("button_hover",          "#d0d0d0")
     btn_p    = colors.get("button_pressed",        "#b1b1b1")
@@ -101,7 +113,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             color: {fg};
         }}
 
-        /* ── List / Tree / Table ────────────────────────────────────── */
+        /*    List / Tree / Table                                        */
         QTreeWidget, QTreeView,
         QListWidget, QListView,
         QTableWidget, QTableView {{
@@ -131,7 +143,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             color: {fg};
         }}
 
-        /* ── Header ─────────────────────────────────────────────────── */
+        /*    Header                                                     */
         QHeaderView::section {{
             background-color: {bg2};
             color: {fg};
@@ -143,7 +155,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             background-color: {btn_h};
         }}
 
-        /* ── Buttons ─────────────────────────────────────────────────── */
+        /*    Buttons                                                     */
         QPushButton {{
             background-color: {btn_n};
             color: {fg};
@@ -166,7 +178,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             border: 2px solid {acc};
         }}
 
-        /* ── Inputs ──────────────────────────────────────────────────── */
+        /*    Inputs                                                      */
         QLineEdit, QTextEdit, QPlainTextEdit {{
             background-color: {filt_bg};
             color: {fg};
@@ -180,7 +192,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             border-color: {acc};
         }}
 
-        /* ── ComboBox ────────────────────────────────────────────────── */
+        /*    ComboBox                                                    */
         QComboBox {{
             background-color: {filt_bg};
             color: {fg};
@@ -203,7 +215,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             selection-color: {sel_fg};
         }}
 
-        /* ── SpinBox ─────────────────────────────────────────────────── */
+        /*    SpinBox                                                     */
         QSpinBox, QDoubleSpinBox {{
             background-color: {filt_bg};
             color: {fg};
@@ -213,7 +225,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
         }}
         QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {acc}; }}
 
-        /* ── ProgressBar ─────────────────────────────────────────────── */
+        /*    ProgressBar                                                 */
         QProgressBar {{
             background-color: {bg2};
             border: 1px solid {brd};
@@ -225,13 +237,13 @@ def build_dialog_stylesheet(colors: dict) -> str:
             border-radius: 2px;
         }}
 
-        /* ── Labels ──────────────────────────────────────────────────── */
+        /*    Labels                                                      */
         QLabel {{
             color: {fg};
             background: transparent;
         }}
 
-        /* ── GroupBox ────────────────────────────────────────────────── */
+        /*    GroupBox                                                    */
         QGroupBox {{
             color: {fg};
             border: 1px solid {brd};
@@ -247,7 +259,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             padding: 0 3px;
         }}
 
-        /* ── CheckBox / RadioButton ───────────────────────────────────── */
+        /*    CheckBox / RadioButton                                       */
         QCheckBox, QRadioButton {{
             color: {fg};
             spacing: 6px;
@@ -266,7 +278,7 @@ def build_dialog_stylesheet(colors: dict) -> str:
             border-color: {acc};
         }}
 
-        /* ── Tabs ────────────────────────────────────────────────────── */
+        /*    Tabs                                                        */
         QTabWidget::pane {{
             border: 1px solid {brd};
             background-color: {bg};
@@ -287,15 +299,15 @@ def build_dialog_stylesheet(colors: dict) -> str:
             color: {fg};
         }}
 
-        /* ── Splitter ────────────────────────────────────────────────── */
+        /*    Splitter handles — style from theme handle_style key         */
         QSplitter::handle {{
-            background-color: {brd};
+            {handle_css}
         }}
         QSplitter::handle:hover {{
-            background-color: {acc};
+            background-color: {acc}; opacity: 0.8;
         }}
 
-        /* ── Scrollbars ──────────────────────────────────────────────── */
+        /*    Scrollbars                                                  */
         QScrollBar:vertical {{
             background: {bg2};
             width: 10px;
@@ -335,4 +347,12 @@ def apply_dialog_theme(dialog, parent=None) -> None:
     """
     source = parent or dialog
     colors = get_theme_colors(source)
+    settings = None
+    node = source
+    while node is not None and settings is None:          # colour transparency from settings
+        settings = getattr(node, "app_settings", None)
+        node = node.parent() if callable(getattr(node, "parent", None)) else None
+    if settings is not None:
+        from apps.utils.app_settings_system import apply_color_alpha
+        colors = apply_color_alpha(colors, settings.current_settings.get("color_alpha", {}))
     dialog.setStyleSheet(build_dialog_stylesheet(colors))
